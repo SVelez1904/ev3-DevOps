@@ -29,6 +29,7 @@ function setStatus(mensaje, tipo = "ok") {
   statusDiv.className = "status " + tipo;
 }
 
+
 async function cargarProductos() {
   try {
     const res = await fetch(API_BASE);
