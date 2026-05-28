@@ -22,4 +22,4 @@ jobs:
       - name: Ejecutar script
         run: |
           chmod +x ./scripts/crear-red-lab.sh
-          ../scripts/crear-red-lab.sh
+          ./scripts/crear-red-lab.sh
