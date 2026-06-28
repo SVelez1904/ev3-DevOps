@@ -6,13 +6,20 @@ on:
     paths:
       - "frontend/**"
 
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: innovatech-frontend
+  ECS_CLUSTER: cluster-innovatech
+  ECS_SERVICE: frontend-task-service        
+  CONTAINER_NAME: frontend
+
 jobs:
   build-push-deploy-frontend:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout código
-      uses: actions/checkout@v3
+    - name: Checkout codigo
+      uses: actions/checkout@v4
 
     - name: Configurar credenciales AWS
       uses: aws-actions/configure-aws-credentials@v4
@@ -20,30 +27,41 @@ jobs:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-        aws-region: ${{ secrets.AWS_REGION }}
+        aws-region: ${{ env.AWS_REGION }}
 
-    - name: Login en Amazon ECR (runner)
-      uses: aws-actions/amazon-ecr-login@v1
+    - name: Login en Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
 
     - name: Build imagen Frontend y push a ECR
+      id: build-image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        IMAGE_TAG: ${{ github.sha }}
       run: |
         cd frontend
-        docker build -t tienda-frontend .
-        docker tag tienda-frontend:latest ${{ secrets.ECR_REPO_URL_FRONTEND }}:latest
-        docker push ${{ secrets.ECR_REPO_URL_FRONTEND }}:latest
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+        docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-    - name: Desplegar Frontend vía SSM
+    - name: Descargar Task Definition activa
       run: |
-        aws ssm send-command \
-          --instance-ids ${{ secrets.EC2_FRONTEND_INSTANCE_ID }} \
-          --document-name "AWS-RunShellScript" \
-          --comment "Actualizar tienda-frontend desde ECR" \
-          --parameters '{"commands":[
-            "set -e",
-            "aws ecr get-login-password --region '${{ secrets.AWS_REGION }}' | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}",
-            "docker pull ${{ secrets.ECR_REPO_URL_FRONTEND }}:latest",
-            "docker stop tienda-frontend || true",
-            "docker rm tienda-frontend || true",
-            "docker run -d --name tienda-frontend -p 80:80 ${{ secrets.ECR_REPO_URL_FRONTEND }}:latest"
-          ]}' \
-          --output text
+        aws ecs describe-task-definition --task-definition frontend-task --query taskDefinition > task-definition.json
+
+    - name: Modificar la Task Definition con la nueva imagen
+      id: task-def
+      uses: aws-actions/amazon-ecs-render-task-definition@v1
+      with:
+        task-definition: task-definition.json
+        container-name: ${{ env.CONTAINER_NAME }}
+        image: ${{ steps.build-image.outputs.image }}
+
+    - name: Desplegar en AWS ECS Fargate
+      uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+      with:
+        task-definition: ${{ steps.task-def.outputs.task-definition }}
+        service: ${{ env.ECS_SERVICE }}
+        cluster: ${{ env.ECS_CLUSTER }}
+        wait-for-service-stability: true
