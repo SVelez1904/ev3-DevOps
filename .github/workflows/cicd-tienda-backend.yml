@@ -10,7 +10,8 @@ env:
   AWS_REGION: us-east-1
   ECR_REPOSITORY: innovatech-backend
   ECS_CLUSTER: cluster-innovatech
-  ECS_SERVICE: backend-task-service-twOwry  
+  ECS_SERVICE: backend-task-service-twOwry
+  CONTAINER_NAME: backend  
 jobs:
   build-push-deploy-backend:
     runs-on: ubuntu-latest
