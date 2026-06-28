@@ -10,7 +10,7 @@ env:
   AWS_REGION: us-east-1
   ECR_REPOSITORY: innovatech-frontend
   ECS_CLUSTER: cluster-innovatech
-  ECS_SERVICE: frontend-task-service        
+  ECS_SERVICE: frontend-task        
   CONTAINER_NAME: frontend
 
 jobs:
